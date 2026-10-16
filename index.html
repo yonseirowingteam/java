@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>조정부 운동인증 챌린지</title>
+    <!-- 데이터 파싱용 라이브러리 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        :root {
+            --primary: #ff4b4b;
+            --bg-color: #ffffff;
+            --text-main: #31333F;
+            --text-light: #6e6e80;
+            --border: #e6e6e9;
+            --card-bg: #f0f2f6;
+        }
+        body {
+            font-family: 'Pretendard', -apple-system, sans-serif;
+            margin: 0; padding: 20px;
+            color: var(--text-main);
+            background-color: var(--bg-color);
+            line-height: 1.5;
+        }
+        .container { max-width: 600px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 5px; }
+        .subtitle { text-align: center; color: var(--text-light); font-size: 0.9em; margin-top: 0; margin-bottom: 20px; }
+        
+        .divider { height: 1px; background: var(--border); margin: 20px 0; }
+        select { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 5px; font-size: 1rem; margin-bottom: 10px; }
+        
+        /* 탭 디자인 */
+        .tabs { display: flex; border-bottom: 2px solid var(--border); margin-bottom: 20px; }
+        .tab-btn { flex: 1; padding: 10px; text-align: center; cursor: pointer; font-weight: bold; color: var(--text-light); border: none; background: none; }
+        .tab-btn.active { color: var(--primary); border-bottom: 2px solid var(--primary); margin-bottom: -2px; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* 카드 및 랭킹 UI */
+        .rank-container { display: flex; gap: 10px; text-align: center; margin-bottom: 20px; }
+        .rank-card { flex: 1; background: var(--card-bg); padding: 15px 5px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .rank-card .medal { font-size: 1.5rem; margin-bottom: 5px; }
+        .rank-card .name { font-size: 0.9rem; font-weight: bold; margin-bottom: 5px; }
+        .rank-card .ticket { font-size: 1rem; color: var(--primary); font-weight: bold; }
+
+        .progress-container { margin-bottom: 15px; }
+        .progress-label { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 5px; font-weight: bold; }
+        .progress-bar-bg { background: var(--border); height: 10px; border-radius: 5px; overflow: hidden; }
+        .progress-bar-fill { background: var(--primary); height: 100%; width: 0%; transition: width 0.5s ease; }
+
+        /* KPI 메트릭 UI */
+        .metric-container { display: flex; gap: 10px; margin-bottom: 20px; }
+        .metric-card { flex: 1; padding: 10px; border-left: 4px solid var(--primary); background: var(--card-bg); border-radius: 0 5px 5px 0; }
+        .metric-card .label { font-size: 0.8rem; color: var(--text-light); }
+        .metric-card .value { font-size: 1.2rem; font-weight: bold; }
+        .metric-card .sub { font-size: 0.75rem; color: var(--text-light); margin-top: 5px; }
+
+        /* 사진 갤러리 */
+        .gallery-item { margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+        .gallery-item img { width: 100%; border-radius: 10px; margin-top: 10px; }
+        .photo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .photo-grid img { width: 100%; border-radius: 10px; }
+
+        /* 알림 */
+        .alert { padding: 10px; background: #e8f4fd; color: #003876; border-radius: 5px; font-size: 0.9rem; margin-bottom: 20px; }
+        #loading { text-align: center; padding: 50px; font-weight: bold; color: var(--text-light); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🚣‍♀️ 운동인증 챌린지</h1>
+    <p class="subtitle">One team, one spirit.</p>
+
+    <!-- 로딩 화면 -->
+    <div id="loading">데이터를 불러오는 중입니다... 🚣</div>
+
+    <!-- 메인 컨텐츠 (초기 숨김) -->
+    <div id="main-content" style="display: none;">
+        <select id="season-select" onchange="applySeasonData()">
+            <option value="10">🏆 10월 (시즌2 - 진행중)</option>
+            <option value="9">🏆 9월 (시즌1 - 종료)</option>
+        </select>
+        
+        <div id="season-info" class="alert"></div>
+        <div class="divider"></div>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('tab-rank', this)">🏆 랭킹 보드</button>
+            <button class="tab-btn" onclick="switchTab('tab-mypage', this)">👤 내 기록실</button>
+            <button class="tab-btn" onclick="switchTab('tab-gallery', this)">📸 갤러리</button>
+        </div>
+
+        <!-- 탭 1: 랭킹 보드 -->
+        <div id="tab-rank" class="tab-content active">
+            <h3 style="margin-top:0;">🔥 <span class="month-label"></span>월 명예의 전당</h3>
+            <p id="rule-caption" style="font-size: 0.8rem; color: gray;"></p>
+            
+            <h4>🎟️ 추첨권 획득 순위</h4>
+            <div id="rank-tickets" class="rank-container"></div>
+            
+            <h4>🚣 에르고 누적 거리 순위 (Top 5)</h4>
+            <div id="rank-distance"></div>
+        </div>
+
+        <!-- 탭 2: 내 기록실 -->
+        <div id="tab-mypage" class="tab-content">
+            <h3 style="margin-top:0;">🔍 <span class="month-label"></span>월 내 기록 찾아보기</h3>
+            <select id="member-select" onchange="renderMyPage()">
+                <option value="">선택해주세요</option>
+            </select>
+
+            <div id="mypage-content" style="display: none; margin-top: 20px;">
+                <div class="metric-container">
+                    <div class="metric-card">
+                        <div class="label">내 추첨권</div>
+                        <div class="value" id="my-ticket-total">0 장</div>
+                        <div class="sub" id="my-ticket-detail"></div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="label">내 에르고 누적</div>
+                        <div class="value" id="my-ergo-total">0 m</div>
+                        <div class="sub" id="my-ergo-detail"></div>
+                    </div>
+                </div>
+
+                <h4>🎯 50,000m 보너스 진행도</h4>
+                <div class="progress-container">
+                    <div class="progress-label">
+                        <span id="my-progress-text"></span>
+                        <span id="my-progress-remain"></span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" id="my-progress-bar"></div>
+                    </div>
+                </div>
+
+                <h4>📸 내 인증 사진 모아보기</h4>
+                <div id="my-gallery" class="photo-grid"></div>
+            </div>
+        </div>
+
+        <!-- 탭 3: 인증 갤러리 -->
+        <div id="tab-gallery" class="tab-content">
+            <h3 style="margin-top:0;">📸 <span class="month-label"></span>월 훈련 갤러리</h3>
+            <div id="global-gallery"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQKSCkdKmmNi07nmmO5RN6vDmt_dobOqdCpluVAoP-91dyu36nyuMjuXJXMXrzQDquOq9seEpHtN5_6/pub?gid=995447885&single=true&output=csv";
+    const TARGET_METERS = 50000;
+    
+    let rawData = [];
+    let currentMonthData = [];
+    let ticketStats = [];
+
+    // 드라이브 이미지 URL 변환
+    function extractDriveUrl(rawText) {
+        if (!rawText) return null;
+        let urls = rawText.split(',').map(u => u.trim());
+        for (let u of urls) {
+            let match = u.match(/id=([a-zA-Z0-9_-]+)/) || u.match(/\/d\/([a-zA-Z0-9_-]+)/);
+            if (match) return `https://lh3.googleusercontent.com/d/${match[1]}`;
+        }
+        return null;
+    }
+
+    // 날짜 파싱 로직 (문자열에서 숫자만 추출)
+    function parseDate(dateStr) {
+        if (!dateStr) return null;
+        const nums = dateStr.match(/\d+/g);
+        if (nums && nums.length >= 3) {
+            let y = parseInt(nums[0]);
+            let m = parseInt(nums[1]);
+            let d = parseInt(nums[2]);
+            if (y < 100) y += 2000;
+            
+            let dateObj = new Date(y, m - 1, d);
+            
+            if (nums.length >= 5) {
+                let hh = parseInt(nums[3]);
+                let mm = parseInt(nums[4]);
+                let ss = nums.length >= 6 ? parseInt(nums[5]) : 0;
+                
+                let upperStr = dateStr.toUpperCase();
+                if ((upperStr.includes('오후') || upperStr.includes('PM')) && hh < 12) hh += 12;
+                if ((upperStr.includes('오전') || upperStr.includes('AM')) && hh === 12) hh = 0;
+                
+                dateObj.setHours(hh, mm, ss);
+            }
+            return dateObj;
+        }
+        return null;
+    }
+
+    // 데이터 초기 로딩
+    Papa.parse(CSV_URL, {
+        download: true,
+        header: true,
+        complete: function(results) {
+            rawData = results.data.filter(row => row['이름'] && row['날짜']).map((row, index) => {
+                let dateObj = parseDate(row['날짜']);
+                let dist = parseInt(row['총거리'] ? String(row['총거리']).replace(/,/g, '') : '0') || 0;
+                let type = row['운동종류'] || '';
+                
+                // 러닝 제외 에르고 거리 계산
+                let ergoDist = (type.includes('러닝') || type.includes('달리기')) ? 0 : dist;
+
+                return {
+                    originalIndex: index,
+                    dateObj: dateObj,
+                    month: dateObj ? dateObj.getMonth() + 1 : 0,
+                    dateStr: dateObj ? `${dateObj.getMonth()+1}/${dateObj.getDate()} ${dateObj.getHours().toString().padStart(2,'0')}:${dateObj.getMinutes().toString().padStart(2,'0')}` : '날짜 미상',
+                    name: row['이름'],
+                    type: type,
+                    dist: dist,
+                    ergoDist: ergoDist,
+                    photoUrl: extractDriveUrl(row['사진링크']),
+                    memo: row['메모'] || '',
+                    group: row['구분'] && row['구분'].trim() !== '' ? row['구분'] : '기존'
+                };
+            });
+            
+            // 강서윤 신입 처리
+            rawData.forEach(r => { if(r.name.replace(/\s/g, '') === '강서윤') r.group = '신입'; });
+
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('main-content').style.display = 'block';
+            applySeasonData();
+        }
+    });
+
+    // 시즌(월) 선택 시 데이터 필터링 및 계산
+    function applySeasonData() {
+        const month = parseInt(document.getElementById('season-select').value);
+        const labels = document.querySelectorAll('.month-label');
+        labels.forEach(l => l.innerText = month);
+
+        if (month === 9) {
+            document.getElementById('season-info').innerText = "ℹ️ 9월 챌린지는 종료되었습니다. (기존 부원 전용 / 러닝 미포함 / 랭킹 보너스 없음)";
+            document.getElementById('rule-caption').innerHTML = "💡 추첨권 규칙: 인증 1회당 <b>1장</b> | 5만m 달성 <b>+3장</b>";
+            currentMonthData = rawData.filter(r => r.month === 9 && r.group === '기존');
+            currentMonthData.forEach(r => r.ergoDist = r.dist); // 9월은 전체 거리가 에르고거리
+        } else {
+            document.getElementById('season-info').innerText = "ℹ️ 10월 챌린지 진행 중! (전체 부원 대상 / 러닝 포함 / 에르고 1~3위 보너스 지급)";
+            document.getElementById('rule-caption').innerHTML = "💡 추첨권 규칙: 인증 1회당 <b>1장</b> | 에르고 5만m 달성 <b>+3장</b> | 에르고 랭킹 1~3위 <b>+3, +2, +1장</b>";
+            currentMonthData = rawData.filter(r => r.month === 10);
+        }
+
+        calculateTickets(month);
+        updateMemberSelect();
+        renderRankingTab(month);
+        renderGalleryTab();
+        document.getElementById('member-select').value = "";
+        document.getElementById('mypage-content').style.display = 'none';
+    }
+
+    // 추첨권 로직 계산
+    function calculateTickets(month) {
+        let stats = {};
+        currentMonthData.forEach(r => {
+            if (!stats[r.name]) stats[r.name] = { name: r.name, count: 0, ergoDist: 0 };
+            stats[r.name].count += 1;
+            stats[r.name].ergoDist += r.ergoDist;
+        });
+
+        ticketStats = Object.values(stats);
+        
+        // 5만미터 보너스
+        ticketStats.forEach(s => {
+            s.baseTicket = s.count;
+            s.bonus50k = s.ergoDist >= TARGET_METERS ? 3 : 0;
+            s.rankBonus = 0;
+        });
+
+        // 10월 랭킹 보너스 (+ 관리자 제외 로직)
+        const excludedNames = month === 10 ? ['김경일', '강예은'] : [];
+        let eligibleForRank = ticketStats.filter(s => !excludedNames.includes(s.name) && s.ergoDist > 0);
+        eligibleForRank.sort((a, b) => b.ergoDist - a.ergoDist);
+
+        if (month === 10) {
+            for (let i = 0; i < Math.min(eligibleForRank.length, 3); i++) {
+                let targetName = eligibleForRank[i].name;
+                let targetStat = ticketStats.find(s => s.name === targetName);
+                if (targetStat) targetStat.rankBonus = 3 - i;
+            }
+        }
+
+        ticketStats.forEach(s => s.totalTicket = s.baseTicket + s.bonus50k + s.rankBonus);
+    }
+
+    // 랭킹 보드 렌더링
+    function renderRankingTab(month) {
+        const excludedNames = month === 10 ? ['김경일', '강예은'] : [];
+        
+        // 추첨권 랭킹 렌더링
+        let rankEligible = ticketStats.filter(s => !excludedNames.includes(s.name));
+        rankEligible.sort((a, b) => b.totalTicket !== a.totalTicket ? b.totalTicket - a.totalTicket : b.ergoDist - a.ergoDist);
+        
+        const medals = ["🥇", "🥈", "🥉"];
+        let ticketsHtml = '';
+        for (let i = 0; i < Math.min(rankEligible.length, 3); i++) {
+            let row = rankEligible[i];
+            ticketsHtml += `
+                <div class="rank-card">
+                    <div class="medal">${medals[i]}</div>
+                    <div class="name">${row.name}</div>
+                    <div class="ticket">${row.totalTicket}장</div>
+                </div>`;
+        }
+        document.getElementById('rank-tickets').innerHTML = ticketsHtml;
+
+        // 에르고 거리 랭킹 렌더링
+        let distEligible = ticketStats.filter(s => !excludedNames.includes(s.name) && s.ergoDist > 0);
+        distEligible.sort((a, b) => b.ergoDist - a.ergoDist);
+        
+        let distHtml = '';
+        for (let i = 0; i < Math.min(distEligible.length, 5); i++) {
+            let row = distEligible[i];
+            let ratio = Math.min((row.ergoDist / TARGET_METERS) * 100, 100);
+            
+            let bonusStr = "";
+            if (month === 10) {
+                if (i === 0) bonusStr = " <span style='color:var(--primary);font-size:0.8rem;'>🥇(+3장)</span>";
+                else if (i === 1) bonusStr = " <span style='color:var(--primary);font-size:0.8rem;'>🥈(+2장)</span>";
+                else if (i === 2) bonusStr = " <span style='color:var(--primary);font-size:0.8rem;'>🥉(+1장)</span>";
+            }
+
+            distHtml += `
+                <div class="progress-container">
+                    <div class="progress-label">
+                        <span><b>${i+1}위. ${row.name}</b>${bonusStr}</span>
+                        <span>${row.ergoDist.toLocaleString()}m</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" style="width: ${ratio}%"></div>
+                    </div>
+                </div>`;
+        }
+        document.getElementById('rank-distance').innerHTML = distHtml;
+    }
+
+    // 내 기록실 셀렉트 박스 업데이트
+    function updateMemberSelect() {
+        const select = document.getElementById('member-select');
+        select.innerHTML = '<option value="">본인의 이름을 선택하세요</option>';
+        
+        let names = [...new Set(currentMonthData.map(r => r.name))].sort();
+        names.forEach(name => {
+            let opt = document.createElement('option');
+            opt.value = name;
+            opt.innerText = name;
+            select.appendChild(opt);
+        });
+    }
+
+    // 내 기록실 렌더링
+    function renderMyPage() {
+        const name = document.getElementById('member-select').value;
+        const container = document.getElementById('mypage-content');
+        
+        if (!name) { container.style.display = 'none'; return; }
+        container.style.display = 'block';
+
+        const month = parseInt(document.getElementById('season-select').value);
+        let myStat = ticketStats.find(s => s.name === name) || { totalTicket:0, baseTicket:0, bonus50k:0, rankBonus:0, ergoDist:0, count:0 };
+        
+        // KPI 반영
+        document.getElementById('my-ticket-total').innerText = `${myStat.totalTicket} 장`;
+        document.getElementById('my-ticket-detail').innerText = month === 10 ? 
+            `기본 ${myStat.baseTicket} + 5만m ${myStat.bonus50k} + 랭킹 ${myStat.rankBonus}` :
+            `기본 ${myStat.baseTicket} + 보너스 ${myStat.bonus50k}`;
+            
+        document.getElementById('my-ergo-total').innerText = `${myStat.ergoDist.toLocaleString()} m`;
+        document.getElementById('my-ergo-detail').innerText = `총 인증(러닝 포함): ${myStat.count}회`;
+
+        // 5만m 프로그레스 바
+        let remain = Math.max(0, TARGET_METERS - myStat.ergoDist);
+        let ratio = Math.min((myStat.ergoDist / TARGET_METERS) * 100, 100);
+        document.getElementById('my-progress-bar').style.width = `${ratio}%`;
+        
+        if (remain > 0) {
+            document.getElementById('my-progress-text').innerText = "보너스 달성 진행도";
+            document.getElementById('my-progress-remain').innerHTML = `보너스까지 <b style="color:var(--primary)">${remain.toLocaleString()}m</b> 남음`;
+        } else {
+            document.getElementById('my-progress-text').innerHTML = "🎉 <b>50,000m 달성!</b>";
+            document.getElementById('my-progress-remain').innerText = "보너스 3장 획득 완료";
+        }
+
+        // 개인 사진 갤러리 (최신 날짜 및 원본 행 번호 역순 정렬)
+        let myPhotos = currentMonthData.filter(r => r.name === name && r.photoUrl);
+        myPhotos.sort((a, b) => b.dateObj - a.dateObj || b.originalIndex - a.originalIndex);
+        
+        let photoHtml = '';
+        if (myPhotos.length === 0) {
+            photoHtml = '<div style="color:gray; font-size:0.9rem;">등록된 사진이 없습니다.</div>';
+        } else {
+            myPhotos.forEach(r => {
+                let caption = r.dist > 0 ? `${r.dist.toLocaleString()}m` : r.type;
+                photoHtml += `
+                    <div>
+                        <img src="${r.photoUrl}" alt="인증사진">
+                        <div style="font-size:0.8rem; text-align:center; color:gray;">${r.dateStr.split(' ')[0]} (${caption})</div>
+                    </div>`;
+            });
+        }
+        document.getElementById('my-gallery').innerHTML = photoHtml;
+    }
+
+    // 전체 갤러리 렌더링
+    function renderGalleryTab() {
+        let photos = currentMonthData.filter(r => r.photoUrl);
+        // 최신 날짜 및 폼 입력 역순 정렬
+        photos.sort((a, b) => b.dateObj - a.dateObj || b.originalIndex - a.originalIndex);
+        
+        let html = '';
+        if (photos.length === 0) {
+            html = '<div style="color:gray;">아직 사진이 없습니다.</div>';
+        } else {
+            // 상위 10개만 출력
+            photos.slice(0, 10).forEach(r => {
+                let memoHtml = r.memo ? `<div style="font-size:0.9rem; color:var(--text-light); margin-top:5px;">💬 ${r.memo}</div>` : '';
+                html += `
+                    <div class="gallery-item">
+                        <div><b>${r.name}</b> 님의 인증 🏃‍♂️ <span style="color:gray; font-size:0.85rem;">(${r.dateStr})</span></div>
+                        ${memoHtml}
+                        <img src="${r.photoUrl}" alt="훈련사진">
+                    </div>`;
+            });
+        }
+        document.getElementById('global-gallery').innerHTML = html;
+    }
+
+    // 탭 전환 UI 스크립트
+    function switchTab(tabId, btnElement) {
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+        btnElement.classList.add('active');
+        document.getElementById(tabId).classList.add('active');
+    }
+</script>
+
+</body>
+</html>
